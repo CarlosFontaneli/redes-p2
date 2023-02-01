@@ -13,6 +13,10 @@ class Servidor:
         self.rede.registrar_recebedor(self._rdt_rcv)
 
     def registrar_monitor_de_conexoes_aceitas(self, callback):
+        """
+        Usado pela camada de aplicação para registrar uma função para ser chamada
+        sempre que uma nova conexão for aceita
+        """
         self.callback = callback
 
     def _rdt_rcv(self, src_addr, dst_addr, segment):
