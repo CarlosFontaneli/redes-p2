@@ -20,7 +20,6 @@ class Servidor:
             flags, _, _, _ = read_header(segment)
 
         if dst_port != self.porta:
-            # Ignora segmentos que não são destinados à porta do nosso servidor
             return
         if ~(self.rede.ignore_checksum) and calc_checksum(segment, src_addr, dst_addr) != 0:
             print('descartando segmento com checksum incorreto')
@@ -28,7 +27,6 @@ class Servidor:
 
         payload = segment[4*(flags >> 12):]
         id = (src_addr, src_port, dst_addr, dst_port)
-
         if (flags & FLAGS_SYN) == FLAGS_SYN:
             flags = flags & 0
             flags = flags | (FLAGS_SYN | FLAGS_ACK)
@@ -40,8 +38,6 @@ class Servidor:
                                         src_addr=src_addr,
                                         dst_addr=dst_addr)
 
-            # conexao = self.conexoes[id]
-
             if self.callback:
                 self.callback(self.conexoes[id])
         elif id in self.conexoes:
@@ -50,10 +46,6 @@ class Servidor:
         else:
             print('%s:%d -> %s:%d (pacote associado a conexão desconhecida)' %
                   (src_addr, src_port, dst_addr, dst_port))
-
-    """ def _fechar_conexao(self, id):
-        if id in self.conexoes:
-            del self.conexoes[id] """
 
 
 class Conexao:
@@ -90,21 +82,18 @@ class Conexao:
                                  dst_addr)
         self.servidor.rede.enviar(cabecalho, dst_addr)
 
-        # Incrementando seq_no para considerar o SYN enviado
         self.seq_no += 1
         self.seq_no_base = self.seq_no
 
     def timer_function(self):
         if len(self.no_ack):
-            #segmento, _, dst_addr, _ = self.no_ack[0]
             segmento = self.no_ack[0][0]
             dst_addr = self.no_ack[0][2]
-            # Reenviando pacote
             self.servidor.rede.enviar(segmento, dst_addr)
             self.no_ack[0][3] = None
 
     def update_timeout(self):
-        #_, _, _, sample_rtt = self.no_ack[0]
+
         sample_rtt = self.no_ack[0][3]
         if sample_rtt == None:
             return
@@ -122,10 +111,6 @@ class Conexao:
 
     def _rdt_rcv(self, seq_no, ack_no, flags, payload):
         print('recebido payload: %r' % payload)
-
-        # Verificando se o pacote não é duplicado ou está fora de ordem
-        """ if seq_no != self.ack_no:
-            return """
 
         # Se for um ACK, é preciso encerrar o timer e remover da lista de pacotes
         # que precisam ser confirmados
@@ -151,7 +136,6 @@ class Conexao:
         self.ack_no += len(payload)
 
         # Construindo e enviando pacote ACK
-        #dst_addr, dst_port, src_addr, src_port = self.id
         dst_addr = self.id[0]
         dst_port = self.id[1]
         src_addr = self.id[2]
@@ -168,18 +152,12 @@ class Conexao:
     # Os métodos abaixo fazem parte da API
 
     def registrar_recebedor(self, callback):
-        """
-        Usado pela camada de aplicação para registrar uma função para ser chamada
-        sempre que dados forem corretamente recebidos
-        """
         self.callback = callback
 
     def enviar(self, dados):
         """
         Usado pela camada de aplicação para enviar dados
         """
-        # Construindo e enviando pacotes
-        #dst_addr, dst_port, src_addr, src_port = self.id
         dst_addr = self.id[0]
         dst_port = self.id[1]
         src_addr = self.id[2]
@@ -187,9 +165,6 @@ class Conexao:
 
         flags = 0 | FLAGS_ACK
 
-        """ for i in range(int(len(dados)/MSS)):
-            ini = i*MSS
-            fim = min(len(dados), (i+1)*MSS) """
         intervalo = int(len(dados)/MSS)
         for i in range(intervalo):
             inicio = i*MSS
@@ -225,7 +200,6 @@ class Conexao:
         Usado pela camada de aplicação para fechar a conexão
         """
         # Construindo e enviando pacote FYN
-        #dst_addr, dst_port, src_addr, src_port = self.id
         dst_addr = self.id[0]
         dst_port = self.id[1]
         src_addr = self.id[2]
