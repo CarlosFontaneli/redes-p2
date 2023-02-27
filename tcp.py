@@ -63,7 +63,6 @@ class Conexao:
         self.estimated_rtt = None
         self.fila_envio = []
 
-        # Invertento endereço de origem e de destino
         aux = src_port
         src_port = dst_port
         dst_port = aux
@@ -72,7 +71,6 @@ class Conexao:
         src_addr = dst_addr
         dst_addr = aux
 
-        # Construindo cabeçalho com flags SYN e ACK
         segmento = make_header(src_port,
                                dst_port,
                                self.seq_no,
@@ -112,8 +110,9 @@ class Conexao:
     def _rdt_rcv(self, seq_no, ack_no, flags, payload):
         print('recebido payload: %r' % payload)
 
-        # Se for um ACK, é preciso encerrar o timer e remover da lista de pacotes
-        # que precisam ser confirmados
+        if seq_no != self.ack_no:
+            return
+
         if (flags & FLAGS_ACK) == FLAGS_ACK:
             if ack_no > self.seq_no_base:
                 self.seq_no_base = ack_no
@@ -135,19 +134,13 @@ class Conexao:
         self.callback(self, payload)
         self.ack_no += len(payload)
 
-        # Construindo e enviando pacote ACK
-        dst_addr = self.id[0]
-        dst_port = self.id[1]
-        src_addr = self.id[2]
-        src_port = self.id[3]
-
         segmento = make_header(
-            src_port, dst_port, self.seq_no_base, self.ack_no, FLAGS_ACK)
+            self.id[3], self.id[1], self.seq_no_base, self.ack_no, FLAGS_ACK)
         cabecalho = fix_checksum(segmento,
-                                 src_addr,
-                                 dst_addr)
+                                 self.id[2],
+                                 self.id[0])
 
-        self.servidor.rede.enviar(cabecalho, dst_addr)
+        self.servidor.rede.enviar(cabecalho, self.id[0])
 
     # Os métodos abaixo fazem parte da API
 
@@ -158,10 +151,6 @@ class Conexao:
         """
         Usado pela camada de aplicação para enviar dados
         """
-        dst_addr = self.id[0]
-        dst_port = self.id[1]
-        src_addr = self.id[2]
-        src_port = self.id[3]
 
         flags = 0 | FLAGS_ACK
 
@@ -175,21 +164,21 @@ class Conexao:
                 fim = (i+1)*MSS
             payload = dados[inicio:fim]
 
-            segmento = make_header(src_port,
-                                   dst_port,
+            segmento = make_header(self.id[3],
+                                   self.id[1],
                                    self.seq_no,
                                    self.ack_no,
                                    flags)
             cabecalho = fix_checksum(segmento+payload,
-                                     src_addr,
-                                     dst_addr)
-            self.servidor.rede.enviar(cabecalho, dst_addr)
+                                     self.id[2],
+                                     self.id[0])
+            self.servidor.rede.enviar(cabecalho, self.id[0])
 
             self.timer = asyncio.get_event_loop().call_later(self.timeout,
                                                              self.timer_function)
             self.no_ack.append([cabecalho,
                                 len(payload),
-                                dst_addr,
+                                self.id[0],
                                 round(time.time(), 5)])
 
             # Atualizando seq_no com os dados recém enviados
@@ -199,20 +188,15 @@ class Conexao:
         """
         Usado pela camada de aplicação para fechar a conexão
         """
-        # Construindo e enviando pacote FYN
-        dst_addr = self.id[0]
-        dst_port = self.id[1]
-        src_addr = self.id[2]
-        src_port = self.id[3]
 
-        segmento = make_header(src_port,
-                               dst_port,
+        segmento = make_header(self.id[3],
+                               self.id[1],
                                self.seq_no,
                                self.ack_no,
                                FLAGS_FIN)
         cabecalho = fix_checksum(segmento,
-                                 src_addr,
-                                 dst_addr)
+                                 self.id[2],
+                                 self.id[0])
 
-        self.servidor.rede.enviar(cabecalho, dst_addr)
+        self.servidor.rede.enviar(cabecalho, self.id[0])
         del self.servidor.conexoes[self.id]
