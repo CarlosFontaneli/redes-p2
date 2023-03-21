@@ -21,7 +21,7 @@ class Servidor:
 
         if dst_port != self.porta:
             return
-        if ~(self.rede.ignore_checksum) and calc_checksum(segment, src_addr, dst_addr) != 0:
+        if (not self.rede.ignore_checksum) and calc_checksum(segment, src_addr, dst_addr) != 0:
             print('descartando segmento com checksum incorreto')
             return
 
@@ -50,6 +50,7 @@ class Servidor:
 
 class Conexao:
     def __init__(self, servidor, id, seq_no, ack_no, flags, src_port, dst_port, src_addr, dst_addr):
+        print('criando objeto Conexao com seq_no=', seq_no)
         self.servidor = servidor
         self.id = id
         self.seq_no = seq_no
@@ -92,6 +93,8 @@ class Conexao:
 
     def update_timeout(self):
 
+        if len(self.no_ack) == 0:
+            return
         sample_rtt = self.no_ack[0][3]
         if sample_rtt == None:
             return
@@ -118,8 +121,10 @@ class Conexao:
                 self.seq_no_base = ack_no
                 if self.no_ack != 0:
                     self.update_timeout()
-                    self.timer.cancel()
-                    self.no_ack.pop(0)
+                    if self.timer is not None:
+                        self.timer.cancel()
+                    if self.no_ack:
+                        self.no_ack.pop(0)
                     if self.no_ack:
                         self.timer = asyncio.get_event_loop().call_later(
                             self.timeout, self.timer_function)
@@ -154,8 +159,10 @@ class Conexao:
 
         flags = 0 | FLAGS_ACK
 
-        intervalo = int(len(dados)/MSS)
+        intervalo = (len(dados)+MSS-1)//MSS
+        print('entrou em enviar', dados)
         for i in range(intervalo):
+            print('enviar iteracao', i)
             inicio = i*MSS
             fim = 0
             if len(dados) < (i+1)*MSS:
@@ -164,6 +171,7 @@ class Conexao:
                 fim = (i+1)*MSS
             payload = dados[inicio:fim]
 
+            print('montando com seq_no', self.seq_no)
             segmento = make_header(self.id[3],
                                    self.id[1],
                                    self.seq_no,
@@ -172,6 +180,7 @@ class Conexao:
             cabecalho = fix_checksum(segmento+payload,
                                      self.id[2],
                                      self.id[0])
+            print('enviando', cabecalho)
             self.servidor.rede.enviar(cabecalho, self.id[0])
 
             self.timer = asyncio.get_event_loop().call_later(self.timeout,
